@@ -16,6 +16,7 @@ import {
   HelpCircle,
   Mail,
   Key,
+  Volume2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useApp } from '../context/AppContext';
@@ -30,6 +31,12 @@ export const ProfilePage: React.FC = () => {
     notificationPermission,
     requestNotificationPermission,
     sendNotification,
+    voiceRemindersEnabled,
+    setVoiceRemindersEnabled,
+    selectedVoiceURI,
+    setSelectedVoiceURI,
+    availableVoices,
+    testVoiceReminder,
   } = useApp();
 
   const { user, logout, setShowAuthModal, triggerOnboarding } = useAuth();
@@ -239,7 +246,77 @@ export const ProfilePage: React.FC = () => {
             </div>
           </div>
 
-          {/* 3. TOGGLE: AUTOMATIC DRUG INTERACTION ALERTS */}
+          {/* 3. VOICE MEDICATION REMINDERS SETTINGS */}
+          <div className="pb-5 border-b border-slate-100 dark:border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-950/80 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0">
+                  <Volume2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-sora font-semibold text-sm text-slate-900 dark:text-white">
+                      🔊 Voice Medication Reminders
+                    </h4>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                      voiceRemindersEnabled
+                        ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}>
+                      {voiceRemindersEnabled ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Text-to-Speech audio announcements when scheduled medication time arrives.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setVoiceRemindersEnabled(!voiceRemindersEnabled)}
+                  className="p-1 rounded-xl hover:scale-105 transition-transform"
+                >
+                  {voiceRemindersEnabled ? (
+                    <ToggleRight className="w-10 h-10 text-teal-600" />
+                  ) : (
+                    <ToggleLeft className="w-10 h-10 text-slate-400" />
+                  )}
+                </button>
+
+                <button
+                  onClick={testVoiceReminder}
+                  className="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-1.5"
+                >
+                  <Volume2 className="w-4 h-4" />
+                  <span>Test Voice Reminder</span>
+                </button>
+              </div>
+            </div>
+
+            {/* PREFERRED VOICE SELECTOR IF AVAILABLE */}
+            {availableVoices.length > 0 && (
+              <div className="pl-13 pt-1 flex flex-col sm:flex-row sm:items-center gap-2">
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 shrink-0">
+                  Preferred Speech Voice:
+                </label>
+                <select
+                  value={selectedVoiceURI || ''}
+                  onChange={(e) => setSelectedVoiceURI(e.target.value || null)}
+                  className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 max-w-md"
+                >
+                  <option value="">Browser Default Voice</option>
+                  {availableVoices.map((v) => (
+                    <option key={v.voiceURI} value={v.voiceURI}>
+                      {v.name} ({v.lang})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* 4. TOGGLE: AUTOMATIC DRUG INTERACTION ALERTS */}
           <div className="flex items-center justify-between pb-5 border-b border-slate-100 dark:border-slate-800">
             <div>
               <h4 className="font-sora font-semibold text-sm text-slate-900 dark:text-white">

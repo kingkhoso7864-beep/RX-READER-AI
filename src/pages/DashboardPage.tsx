@@ -14,6 +14,7 @@ import {
   PlusCircle,
   FileText,
   RotateCcw,
+  Volume2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -26,6 +27,9 @@ export const DashboardPage: React.FC = () => {
     notificationPermission,
     requestNotificationPermission,
     sendNotification,
+    testVoiceReminder,
+    voiceRemindersEnabled,
+    setVoiceRemindersEnabled,
     language,
     loadSampleData,
     clearAllData,
@@ -68,12 +72,19 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 w-full md:w-auto">
+          <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
             <button
               onClick={requestNotificationPermission}
-              className="flex-1 md:flex-none px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm shadow-md shadow-amber-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all"
+              className="flex-1 md:flex-none px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs sm:text-sm shadow-md shadow-amber-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all"
             >
               {notificationPermission === 'granted' ? 'Allowed ✓' : 'Allow Access'}
+            </button>
+            <button
+              onClick={testVoiceReminder}
+              className="flex-1 md:flex-none px-4 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-600 text-white font-semibold text-xs sm:text-sm shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-1.5"
+            >
+              <Volume2 className="w-4 h-4" />
+              <span>Test Voice Reminder</span>
             </button>
             <button
               onClick={() =>
@@ -82,7 +93,7 @@ export const DashboardPage: React.FC = () => {
                   'Rx Reader notifications are working perfectly!'
                 )
               }
-              className="flex-1 md:flex-none px-4 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white font-medium text-sm backdrop-blur-md border border-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+              className="flex-1 md:flex-none px-3.5 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 text-white font-medium text-xs sm:text-sm backdrop-blur-md border border-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
             >
               Test Alert
             </button>

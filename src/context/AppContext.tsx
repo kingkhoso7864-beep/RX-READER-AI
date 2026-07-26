@@ -12,13 +12,24 @@ interface AppContextType {
   setActiveTab: (tab: string) => void;
   schedule: TodayScheduleItem[];
   toggleScheduleItem: (id: string) => void;
+  toggleSkipScheduleItem: (id: string) => void;
   addScheduleItem: (item: Omit<TodayScheduleItem, 'id' | 'taken'>) => void;
+  addBulkScheduleItems: (items: Omit<TodayScheduleItem, 'id' | 'taken'>[]) => void;
+  updateScheduleItem: (id: string, updated: Partial<TodayScheduleItem>) => void;
+  deleteScheduleItem: (id: string) => void;
   scans: PrescriptionScan[];
   addScan: (scan: PrescriptionScan) => void;
   deleteScan: (id: string) => void;
   notificationPermission: NotificationPermission;
   requestNotificationPermission: () => Promise<NotificationPermission>;
   sendNotification: (title: string, body: string) => void;
+  voiceRemindersEnabled: boolean;
+  setVoiceRemindersEnabled: (enabled: boolean) => void;
+  selectedVoiceURI: string | null;
+  setSelectedVoiceURI: (voiceURI: string | null) => void;
+  availableVoices: SpeechSynthesisVoice[];
+  speakText: (text: string) => void;
+  testVoiceReminder: () => void;
   exportPDFReport: () => void;
   profile: UserProfile;
   setProfile: React.Dispatch<React.SetStateAction<UserProfile>>;
@@ -123,6 +134,161 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
+
+  // Voice Reminders State
+  const [voiceRemindersEnabled, setVoiceRemindersEnabledState] = useState<boolean>(() => {
+    return localStorage.getItem('rx_voice_reminders') !== 'false';
+  });
+
+  const [selectedVoiceURI, setSelectedVoiceURIState] = useState<string | null>(() => {
+    return localStorage.getItem('rx_selected_voice') || null;
+  });
+
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+
+  const setVoiceRemindersEnabled = (enabled: boolean) => {
+    setVoiceRemindersEnabledState(enabled);
+    localStorage.setItem('rx_voice_reminders', enabled ? 'true' : 'false');
+    toast.success(enabled ? '🔊 Voice Medication Reminders Enabled' : '🔇 Voice Reminders Muted');
+  };
+
+  const setSelectedVoiceURI = (voiceURI: string | null) => {
+    setSelectedVoiceURIState(voiceURI);
+    if (voiceURI) localStorage.setItem('rx_selected_voice', voiceURI);
+    else localStorage.removeItem('rx_selected_voice');
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setAvailableVoices(voices);
+    };
+    loadVoices();
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+  }, []);
+
+  const speakText = (text: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      console.warn('Speech synthesis API not supported in this browser.');
+      return;
+    }
+    if (!voiceRemindersEnabled) return;
+
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      if (selectedVoiceURI && availableVoices.length > 0) {
+        const foundVoice = availableVoices.find((v) => v.voiceURI === selectedVoiceURI);
+        if (foundVoice) utterance.voice = foundVoice;
+      }
+      utterance.rate = 0.95;
+      utterance.pitch = 1.0;
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn('Speech synthesis error:', err);
+    }
+  };
+
+  const testVoiceReminder = () => {
+    toast('🔊 Playing Test Voice Reminder...', { icon: '📢' });
+    sendNotification(
+      'Rx Reader AI — Medication Reminder',
+      'Your medicine time has arrived. Please take Paracetamol 500 mg.'
+    );
+    speakText('Your medicine time has arrived. Please take your scheduled medication.');
+  };
+
+  // Auto-schedule medication alert checker loop
+  const triggeredDosesRef = React.useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const parseTimeStringToMinutes = (timeStr: string): number | null => {
+      if (!timeStr) return null;
+      const clean = timeStr.trim().toUpperCase();
+      const match = clean.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+      if (!match) return null;
+      let hours = parseInt(match[1], 10);
+      const minutes = parseInt(match[2], 10);
+      const modifier = match[3];
+
+      if (modifier) {
+        if (modifier === 'PM' && hours < 12) hours += 12;
+        if (modifier === 'AM' && hours === 12) hours = 0;
+      }
+      return hours * 60 + minutes;
+    };
+
+    const formatDosageForSpeech = (dosage: string): string => {
+      if (!dosage) return '';
+      return dosage
+        .replace(/\bmg\b/gi, 'milligrams')
+        .replace(/\bmcg\b/gi, 'micrograms')
+        .replace(/\bg\b/gi, 'grams')
+        .replace(/\bml\b/gi, 'milliliters')
+        .replace(/\btab\b/gi, 'tablet')
+        .replace(/\btabs\b/gi, 'tablets')
+        .replace(/\bcap\b/gi, 'capsule')
+        .replace(/\bcaps\b/gi, 'capsules');
+    };
+
+    const checkScheduleTimes = () => {
+      if (schedule.length === 0) return;
+
+      const now = new Date();
+      const todayDateStr = now.toISOString().slice(0, 10);
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+      const matchingItems = schedule.filter((item) => {
+        if (item.taken) return false;
+        const itemMin = parseTimeStringToMinutes(item.time);
+        if (itemMin === null) return false;
+        if (itemMin !== currentMinutes) return false;
+
+        const triggerKey = `${todayDateStr}_${item.id}_${currentMinutes}`;
+        return !triggeredDosesRef.current.has(triggerKey);
+      });
+
+      if (matchingItems.length === 0) return;
+
+      matchingItems.forEach((item) => {
+        const triggerKey = `${todayDateStr}_${item.id}_${currentMinutes}`;
+        triggeredDosesRef.current.add(triggerKey);
+      });
+
+      if (matchingItems.length === 1) {
+        const item = matchingItems[0];
+        const medSpoken = formatDosageForSpeech(item.medicineName);
+        const dosageSpoken = formatDosageForSpeech(item.dosage);
+
+        const title = 'Rx Reader AI — Medication Reminder';
+        const body = `Your medicine time has arrived. Please take ${item.medicineName} ${item.dosage}.`;
+        const speechText = `Your medicine time has arrived. Please take your ${medSpoken} ${dosageSpoken}.`;
+
+        sendNotification(title, body);
+        speakText(speechText);
+      } else {
+        const medListBody = matchingItems.map((i) => `${i.medicineName} ${i.dosage}`).join(' and ');
+        const medListSpoken = matchingItems
+          .map((i) => `${formatDosageForSpeech(i.medicineName)} ${formatDosageForSpeech(i.dosage)}`)
+          .join(' and ');
+
+        const title = 'Rx Reader AI — Medication Reminder';
+        const body = `You have medication scheduled now. Please take ${medListBody}.`;
+        const speechText = `You have medication scheduled now. Please take ${medListSpoken}.`;
+
+        sendNotification(title, body);
+        speakText(speechText);
+      }
+    };
+
+    const interval = setInterval(checkScheduleTimes, 15000);
+    checkScheduleTimes();
+
+    return () => clearInterval(interval);
+  }, [schedule, voiceRemindersEnabled, selectedVoiceURI, availableVoices]);
 
   // Load User Data based on authenticated identity
   useEffect(() => {
@@ -295,6 +461,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const toggleSkipScheduleItem = (id: string) => {
+    let nextSkipped = false;
+    setSchedule((prev) =>
+      prev.map((item) => {
+        if (item.id === id) {
+          nextSkipped = !item.skipped;
+          return {
+            ...item,
+            skipped: nextSkipped,
+            skippedAt: nextSkipped ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : undefined,
+            taken: false, // reset taken if marked skipped
+          };
+        }
+        return item;
+      })
+    );
+    toast(nextSkipped ? 'Dose marked as Skipped' : 'Dose reset to Pending', { icon: nextSkipped ? '⏭️' : 'ℹ️' });
+  };
+
   const addScheduleItem = (newItem: Omit<TodayScheduleItem, 'id' | 'taken'>) => {
     const item: TodayScheduleItem = {
       ...newItem,
@@ -303,6 +488,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setSchedule((prev) => [item, ...prev]);
     toast.success(`Added ${item.medicineName} to Schedule!`);
+  };
+
+  const addBulkScheduleItems = (newItems: Omit<TodayScheduleItem, 'id' | 'taken'>[]) => {
+    const createdItems: TodayScheduleItem[] = newItems.map((newItem, idx) => ({
+      ...newItem,
+      id: `sched-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+      taken: false,
+    }));
+
+    setSchedule((prev) => [...createdItems, ...prev]);
+    toast.success('Medication schedule added successfully.');
+  };
+
+  const updateScheduleItem = (id: string, updated: Partial<TodayScheduleItem>) => {
+    setSchedule((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, ...updated } : item))
+    );
+    toast.success('Schedule item updated!');
+  };
+
+  const deleteScheduleItem = (id: string) => {
+    setSchedule((prev) => prev.filter((item) => item.id !== id));
+    toast.success('Schedule item removed.');
   };
 
   const addScan = (newScan: PrescriptionScan) => {
@@ -461,13 +669,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveTab,
         schedule,
         toggleScheduleItem,
+        toggleSkipScheduleItem,
         addScheduleItem,
+        addBulkScheduleItems,
+        updateScheduleItem,
+        deleteScheduleItem,
         scans,
         addScan,
         deleteScan,
         notificationPermission,
         requestNotificationPermission,
         sendNotification,
+        voiceRemindersEnabled,
+        setVoiceRemindersEnabled,
+        selectedVoiceURI,
+        setSelectedVoiceURI,
+        availableVoices,
+        speakText,
+        testVoiceReminder,
         exportPDFReport,
         profile,
         setProfile,

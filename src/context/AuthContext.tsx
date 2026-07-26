@@ -72,8 +72,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           toast.success(`Welcome, ${googleUser.displayName}! Signed in with Google.`);
         }
       })
-      .catch((err) => {
+      .catch((err: any) => {
         console.warn('Google Auth redirect result handler:', err);
+        if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
+          const hostname = typeof window !== 'undefined' ? window.location.hostname : 'rx-readerai.ai.studio';
+          toast.error(`Firebase Auth Domain Error: '${hostname}' is not authorized in Firebase Console -> Authentication -> Settings -> Authorized domains.`, { id: 'unauth-domain', duration: 10000 });
+        }
       });
   }, []);
 
@@ -223,6 +227,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: true };
     } catch (popupErr: any) {
       console.warn('Popup signin error, checking for redirect fallback:', popupErr);
+
+      if (
+        popupErr?.code === 'auth/unauthorized-domain' ||
+        popupErr?.message?.includes('unauthorized-domain')
+      ) {
+        const domain = typeof window !== 'undefined' ? window.location.hostname : 'rx-readerai.ai.studio';
+        const msg = `Unauthorized Domain: '${domain}' is not authorized in Firebase Console -> Authentication -> Settings -> Authorized domains.`;
+        toast.error(msg, { id: 'unauth-domain', duration: 10000 });
+        return { success: false, error: msg };
+      }
       
       // If popup is blocked by browser or closed, fallback to redirect
       if (

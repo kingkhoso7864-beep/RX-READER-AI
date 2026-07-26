@@ -43,6 +43,13 @@ export interface TodayScheduleItem {
   foodAdvice: string;
   taken: boolean;
   takenAt?: string;
+  skipped?: boolean;
+  skippedAt?: string;
+  frequency?: string;
+  startDate?: string;
+  endDate?: string;
+  prescriptionId?: string;
+  prescriptionTitle?: string;
 }
 
 export interface PrescriptionScan {
@@ -83,4 +90,6 @@ export interface UserProfile {
   allergies: string[];
   autoInteractionAlerts: boolean;
   bilingualOcr: boolean;
+  voiceRemindersEnabled?: boolean;
+  preferredVoiceURI?: string;
 }

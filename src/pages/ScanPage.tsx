@@ -11,18 +11,21 @@ import {
   Eye,
   ShieldCheck,
   HelpCircle,
+  CalendarPlus,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Medicine, PrescriptionScan } from '../types';
+import { ScheduleModal } from '../components/ScheduleModal';
 
 export const ScanPage: React.FC = () => {
-  const { addScan, addScheduleItem, language } = useApp();
+  const { addScan, language } = useApp();
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<PrescriptionScan | null>(null);
-  const [addedMeds, setAddedMeds] = useState<Record<string, boolean>>({});
+  const [schedulingScan, setSchedulingScan] = useState<PrescriptionScan | null>(null);
+  const [schedulingSingleMed, setSchedulingSingleMed] = useState<Medicine | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -187,69 +190,6 @@ export const ScanPage: React.FC = () => {
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  const handleAddMedicineToSchedule = (med: Medicine) => {
-    const mealText = med.meal_relation || med.foodAdvice || 'Not Specified';
-
-    if (med.timing) {
-      let addedAny = false;
-      if (med.timing.morning_subah) {
-        addScheduleItem({
-          medicineId: med.id,
-          medicineName: med.name,
-          dosage: med.dosage,
-          time: '08:00 AM',
-          timeOfDay: 'Morning',
-          foodAdvice: mealText,
-        });
-        addedAny = true;
-      }
-      if (med.timing.afternoon_dopahar) {
-        addScheduleItem({
-          medicineId: med.id,
-          medicineName: med.name,
-          dosage: med.dosage,
-          time: '02:00 PM',
-          timeOfDay: 'Afternoon',
-          foodAdvice: mealText,
-        });
-        addedAny = true;
-      }
-      if (med.timing.night_raat) {
-        addScheduleItem({
-          medicineId: med.id,
-          medicineName: med.name,
-          dosage: med.dosage,
-          time: '10:00 PM',
-          timeOfDay: 'Night',
-          foodAdvice: mealText,
-        });
-        addedAny = true;
-      }
-      if (!addedAny) {
-        addScheduleItem({
-          medicineId: med.id,
-          medicineName: med.name,
-          dosage: med.dosage,
-          time: '08:00 AM',
-          timeOfDay: 'Morning',
-          foodAdvice: mealText,
-        });
-      }
-    } else {
-      const freq = med.frequency || '';
-      addScheduleItem({
-        medicineId: med.id,
-        medicineName: med.name,
-        dosage: med.dosage,
-        time: freq.includes('Night') ? '10:00 PM' : freq.includes('Afternoon') ? '02:00 PM' : '08:00 AM',
-        timeOfDay: freq.includes('Night') ? 'Night' : freq.includes('Afternoon') ? 'Afternoon' : 'Morning',
-        foodAdvice: mealText,
-      });
-    }
-
-    setAddedMeds((prev) => ({ ...prev, [med.id]: true }));
   };
 
   return (
@@ -449,14 +389,23 @@ export const ScanPage: React.FC = () => {
 
             {/* RIGHT: DETECTED MEDICINES CARDS */}
             <div className="lg:col-span-2 space-y-4">
-              <h3 className="font-sora font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-teal-600" />
-                <span>Detected Medicines ({scanResult.medicines.length})</span>
-              </h3>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <h3 className="font-sora font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-teal-600" />
+                  <span>Detected Medicines ({scanResult.medicines.length})</span>
+                </h3>
+
+                <button
+                  onClick={() => setSchedulingScan(scanResult)}
+                  className="px-4 py-2 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white font-bold text-xs shadow-md shadow-teal-600/20 flex items-center gap-1.5 hover:scale-[1.02] active:scale-[0.98] transition-all w-fit"
+                >
+                  <CalendarPlus className="w-4 h-4" />
+                  <span>Schedule All Medicines</span>
+                </button>
+              </div>
 
               <div className="space-y-3">
                 {scanResult.medicines.map((med) => {
-                  const isAdded = !!addedMeds[med.id];
                   return (
                     <div
                       key={med.id}
@@ -476,25 +425,11 @@ export const ScanPage: React.FC = () => {
                           </div>
 
                           <button
-                            onClick={() => handleAddMedicineToSchedule(med)}
-                            disabled={isAdded}
-                            className={`shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                              isAdded
-                                ? 'bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300'
-                                : 'bg-[#0D9488] hover:bg-teal-700 text-white shadow-md shadow-teal-600/20 hover:scale-[1.02] active:scale-[0.98]'
-                            }`}
+                            onClick={() => setSchedulingSingleMed(med)}
+                            className="shrink-0 px-3.5 py-1.5 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white shadow-md shadow-teal-600/20 text-xs font-semibold flex items-center gap-1.5 transition-all hover:scale-[1.02] active:scale-[0.98]"
                           >
-                            {isAdded ? (
-                              <>
-                                <Check className="w-4 h-4 text-emerald-600" />
-                                <span>Scheduled</span>
-                              </>
-                            ) : (
-                              <>
-                                <Plus className="w-4 h-4" />
-                                <span>Add to Schedule</span>
-                              </>
-                            )}
+                            <CalendarPlus className="w-4 h-4" />
+                            <span>Add to Schedule</span>
                           </button>
                         </div>
 
@@ -576,6 +511,17 @@ export const ScanPage: React.FC = () => {
 
         </div>
       )}
+
+      {/* SCHEDULE MODAL */}
+      <ScheduleModal
+        isOpen={!!schedulingScan || !!schedulingSingleMed}
+        onClose={() => {
+          setSchedulingScan(null);
+          setSchedulingSingleMed(null);
+        }}
+        prescription={schedulingScan}
+        singleMedicine={schedulingSingleMed}
+      />
 
     </div>
   );

@@ -11,9 +11,11 @@ import {
   X,
   Printer,
   Sparkles,
+  CalendarPlus,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PrescriptionScan } from '../types';
+import { ScheduleModal } from '../components/ScheduleModal';
 
 export const HistoryPage: React.FC = () => {
   const { scans, language } = useApp();
@@ -22,6 +24,7 @@ export const HistoryPage: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<'All' | 'English' | 'Bilingual'>('All');
   const [isLoading, setIsLoading] = useState(true);
   const [selectedScan, setSelectedScan] = useState<PrescriptionScan | null>(null);
+  const [schedulingScan, setSchedulingScan] = useState<PrescriptionScan | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 400);
@@ -164,13 +167,23 @@ export const HistoryPage: React.FC = () => {
                   <span>{scan.date}</span>
                 </span>
 
-                <button
-                  onClick={() => setSelectedScan(scan)}
-                  className="font-semibold text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 hover:scale-[1.02] transition-transform"
-                >
-                  <span>View Full Details</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setSchedulingScan(scan)}
+                    className="font-bold text-xs text-white bg-[#0D9488] hover:bg-teal-700 px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95"
+                  >
+                    <CalendarPlus className="w-3.5 h-3.5" />
+                    <span>Add to Schedule</span>
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedScan(scan)}
+                    className="font-semibold text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 hover:scale-[1.02] transition-transform"
+                  >
+                    <span>View Full Details</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
             </div>
@@ -241,7 +254,19 @@ export const HistoryPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="pt-4 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
+              <button
+                onClick={() => {
+                  const currentScan = selectedScan;
+                  setSelectedScan(null);
+                  setSchedulingScan(currentScan);
+                }}
+                className="px-5 py-2.5 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white font-bold text-xs shadow-md flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98] transition-all"
+              >
+                <CalendarPlus className="w-4 h-4" />
+                <span>Add Prescription to Schedule</span>
+              </button>
+
               <button
                 onClick={() => setSelectedScan(null)}
                 className="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold"
@@ -253,6 +278,13 @@ export const HistoryPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* SCHEDULE MODAL */}
+      <ScheduleModal
+        isOpen={!!schedulingScan}
+        onClose={() => setSchedulingScan(null)}
+        prescription={schedulingScan}
+      />
 
     </div>
   );
