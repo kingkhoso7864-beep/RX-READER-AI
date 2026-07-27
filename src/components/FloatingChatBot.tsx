@@ -32,8 +32,18 @@ export const FloatingChatBot: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    localStorage.setItem('rx_reader_chat_history', JSON.stringify(messages));
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    try {
+      localStorage.setItem('rx_reader_chat_history', JSON.stringify(messages));
+    } catch (e) {
+      console.error(e);
+    }
+    if (messagesEndRef.current) {
+      try {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } catch (err) {
+        messagesEndRef.current.scrollIntoView(false);
+      }
+    }
   }, [messages]);
 
   const handleSend = async (e?: React.FormEvent) => {
@@ -128,8 +138,14 @@ export const FloatingChatBot: React.FC = () => {
 
       {/* CHAT DRAWER */}
       {isChatOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="w-full sm:w-[400px] h-full bg-white dark:bg-[#1E293B] shadow-2xl flex flex-col border-l border-slate-200 dark:border-slate-800 animate-in slide-in-from-right duration-300">
+        <div
+          onClick={() => setIsChatOpen(false)}
+          className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full sm:w-[400px] h-full bg-white dark:bg-[#1E293B] shadow-2xl flex flex-col border-l border-slate-200 dark:border-slate-800 animate-in slide-in-from-right duration-300"
+          >
             
             {/* CHAT HEADER */}
             <div className="p-4 bg-teal-700 dark:bg-teal-800 text-white flex items-center justify-between shadow-md">

@@ -9,6 +9,7 @@ import { FloatingChatBot } from './components/FloatingChatBot';
 import { AuthModal } from './components/AuthModal';
 import { OnboardingModal } from './components/OnboardingModal';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 import { LandingPage } from './pages/LandingPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -90,9 +91,11 @@ const AppContent: React.FC = () => {
 
       {/* Main Content Area Protected by ProtectedRoute Auth Guard */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <ProtectedRoute fallback={<LandingPage />}>
-          {renderActivePage()}
-        </ProtectedRoute>
+        <ErrorBoundary>
+          <ProtectedRoute fallback={<LandingPage />}>
+            {renderActivePage()}
+          </ProtectedRoute>
+        </ErrorBoundary>
       </main>
 
       {/* Floating AI Medical Assistant Chatbot */}

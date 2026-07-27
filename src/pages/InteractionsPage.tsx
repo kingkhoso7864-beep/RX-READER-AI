@@ -267,8 +267,8 @@ export const InteractionsPage: React.FC = () => {
         </div>
 
         {/* RECHARTS BAR CHART */}
-        <div className="h-64 w-full pt-4">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-64 min-h-[220px] w-full pt-4">
+          <ResponsiveContainer width="100%" height="100%" minHeight={200}>
             <BarChart data={weeklyAdherenceData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <XAxis dataKey="day" stroke="#94a3b8" fontSize={12} tickLine={false} />
               <YAxis stroke="#94a3b8" fontSize={12} domain={[0, 100]} unit="%" tickLine={false} />
