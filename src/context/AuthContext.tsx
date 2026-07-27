@@ -96,6 +96,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
         setUser(mappedUser);
         localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(mappedUser));
+      } else {
+        setUser(null);
+        localStorage.removeItem(USER_STORAGE_KEY);
       }
     });
     return () => unsubscribe();

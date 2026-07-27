@@ -1,0 +1,37 @@
+{
+  "entities": {
+    "UserDocument": {
+      "title": "UserDocument",
+      "description": "UserData document containing isolated prescription history, schedule, profile, and settings for an authenticated user",
+      "type": "object",
+      "properties": {
+        "scans": {
+          "type": "array",
+          "description": "List of scanned prescription records with detected medicines, notes, and metadata"
+        },
+        "schedule": {
+          "type": "array",
+          "description": "List of scheduled medication items including dose timings, frequency, start/end dates, and taken/skipped statuses"
+        },
+        "profile": {
+          "type": "object",
+          "description": "User profile details including name, patient ID, age, gender, blood group, and allergies"
+        },
+        "settings": {
+          "type": "object",
+          "description": "User preferences including language, voice reminders, notification preferences, and theme mode"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserDocument",
+      "description": "Stores user-isolated prescription history, schedule, profile, and settings"
+    }
+  }
+}

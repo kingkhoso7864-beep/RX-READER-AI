@@ -1,9 +1,54 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { doc, setDoc, onSnapshot, collection } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { db, auth } from '../lib/firebase';
 import { useAuth } from './AuthContext';
 import { AppLanguage, PrescriptionScan, TodayScheduleItem, UserProfile } from '../types';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+  };
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+    },
+    operationType,
+    path,
+  };
+  console.warn('Firestore Operation Info: ', JSON.stringify(errInfo));
+  return errInfo;
+}
+
+// Helper to sanitize payload for Firestore (replaces undefined with null)
+function sanitizeDataForFirestore(data: any): any {
+  if (data === undefined) return null;
+  return JSON.parse(
+    JSON.stringify(data, (_key, value) => (value === undefined ? null : value))
+  );
+}
 
 interface AppContextType {
   language: AppLanguage;
@@ -131,6 +176,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     autoInteractionAlerts: true,
     bilingualOcr: true,
   });
+
+  const [isDataLoaded, setIsDataLoaded] = useState<boolean>(false);
+  const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
 
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
@@ -292,124 +340,139 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Load User Data based on authenticated identity
   useEffect(() => {
-    if (!user) {
-      // Guest mode: load guest local storage or sample defaults
-      const savedScans = localStorage.getItem('rx_guest_scans');
-      const savedSched = localStorage.getItem('rx_guest_schedule');
-      const savedProf = localStorage.getItem('rx_guest_profile');
+    setIsDataLoaded(false);
 
-      setScans(savedScans ? JSON.parse(savedScans) : initialScans);
-      setSchedule(savedSched ? JSON.parse(savedSched) : initialSchedule);
-      setProfile(
-        savedProf
-          ? JSON.parse(savedProf)
-          : {
-              name: 'Alex Morgan (Guest)',
-              patientId: 'RX-77492',
-              age: 42,
-              gender: 'Male',
-              bloodGroup: 'O+',
-              allergies: ['Penicillin (Mild Rash)'],
-              autoInteractionAlerts: true,
-              bilingualOcr: true,
-            }
-      );
+    if (!user || !user.id) {
+      // Guest or logged out state: reset in-memory state cleanly
+      setScans([]);
+      setSchedule([]);
+      setProfile({
+        name: 'Guest Patient',
+        patientId: 'RX-GUEST',
+        age: 30,
+        gender: 'Not Specified',
+        bloodGroup: 'Not Specified',
+        allergies: [],
+        autoInteractionAlerts: true,
+        bilingualOcr: true,
+      });
+      setLoadedUserId(null);
       return;
     }
 
-    // Authenticated user: Load user-isolated data
-    const savedScans = localStorage.getItem(`${userStorageKey}_scans`);
-    const savedSched = localStorage.getItem(`${userStorageKey}_schedule`);
-    const savedProf = localStorage.getItem(`${userStorageKey}_profile`);
+    const currentUserId = user.id;
+    setLoadedUserId(currentUserId);
 
     // Real-time Firestore user sync
-    const userDocRef = doc(db, 'users', user.id);
+    const userDocRef = doc(db, 'users', currentUserId);
     const unsub = onSnapshot(
       userDocRef,
       (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
-          if (data.scans) setScans(data.scans);
-          if (data.schedule) setSchedule(data.schedule);
-          if (data.profile) setProfile(data.profile);
+          setScans(Array.isArray(data.scans) ? data.scans : []);
+          setSchedule(Array.isArray(data.schedule) ? data.schedule : []);
+          if (data.profile && typeof data.profile === 'object') {
+            setProfile(data.profile);
+          }
+          if (data.settings && typeof data.settings === 'object') {
+            if (data.settings.language) setLanguageState(data.settings.language);
+            if (data.settings.voiceRemindersEnabled !== undefined) setVoiceRemindersEnabledState(!!data.settings.voiceRemindersEnabled);
+            if (data.settings.selectedVoiceURI !== undefined) setSelectedVoiceURIState(data.settings.selectedVoiceURI);
+          }
         } else {
-          // New User initial setup: Start with empty clean slate for new real accounts!
-          const initialUserScans = savedScans ? JSON.parse(savedScans) : [];
-          const initialUserSchedule = savedSched ? JSON.parse(savedSched) : [];
-          const initialUserProfile = savedProf
-            ? JSON.parse(savedProf)
-            : {
-                name: user.displayName || 'Patient',
-                patientId: `RX-${user.id.slice(0, 6).toUpperCase()}`,
-                age: 30,
-                gender: 'Not Specified',
-                bloodGroup: 'Not Specified',
-                allergies: [],
-                autoInteractionAlerts: true,
-                bilingualOcr: true,
-              };
+          // Genuinely NEW user! Starts with clean empty slate (0 scans, 0 schedule)
+          const newProfile: UserProfile = {
+            name: user.displayName || 'Patient',
+            patientId: `RX-${currentUserId.slice(0, 6).toUpperCase()}`,
+            age: 30,
+            gender: 'Not Specified',
+            bloodGroup: 'Not Specified',
+            allergies: [],
+            autoInteractionAlerts: true,
+            bilingualOcr: true,
+          };
 
-          setScans(initialUserScans);
-          setSchedule(initialUserSchedule);
-          setProfile(initialUserProfile);
+          setScans([]);
+          setSchedule([]);
+          setProfile(newProfile);
 
           // Save initial document to Firestore
           setDoc(
             userDocRef,
-            {
-              scans: initialUserScans,
-              schedule: initialUserSchedule,
-              profile: initialUserProfile,
+            sanitizeDataForFirestore({
+              scans: [],
+              schedule: [],
+              profile: newProfile,
+              settings: {
+                language,
+                voiceRemindersEnabled,
+                selectedVoiceURI,
+              },
               updatedAt: new Date().toISOString(),
-            },
+            }),
             { merge: true }
-          ).catch((e) => console.warn('Firestore initialization save:', e));
+          ).catch((err) => handleFirestoreError(err, OperationType.WRITE, `users/${currentUserId}`));
         }
+        setIsDataLoaded(true);
       },
       (err) => {
-        console.warn('Firestore snapshot error, using local storage fallback:', err);
+        handleFirestoreError(err, OperationType.GET, `users/${currentUserId}`);
+        const savedScans = localStorage.getItem(`${userStorageKey}_scans`);
+        const savedSched = localStorage.getItem(`${userStorageKey}_schedule`);
+        const savedProf = localStorage.getItem(`${userStorageKey}_profile`);
+
         setScans(savedScans ? JSON.parse(savedScans) : []);
         setSchedule(savedSched ? JSON.parse(savedSched) : []);
-        setProfile(
-          savedProf
-            ? JSON.parse(savedProf)
-            : {
-                name: user.displayName || 'Patient',
-                patientId: `RX-${user.id.slice(0, 6).toUpperCase()}`,
-                age: 30,
-                gender: 'Not Specified',
-                bloodGroup: 'Not Specified',
-                allergies: [],
-                autoInteractionAlerts: true,
-                bilingualOcr: true,
-              }
-        );
+        if (savedProf) setProfile(JSON.parse(savedProf));
+        setIsDataLoaded(true);
       }
     );
 
-    return () => unsub();
-  }, [user?.id, userStorageKey]);
+    return () => {
+      unsub();
+      setIsDataLoaded(false);
+    };
+  }, [user?.id]);
 
-  // Persist local storage and Firestore changes
+  // Persist local storage and Firestore changes only when current user data is loaded
   useEffect(() => {
+    if (!user?.id || !isDataLoaded || loadedUserId !== user.id) {
+      return;
+    }
+
     localStorage.setItem(`${userStorageKey}_scans`, JSON.stringify(scans));
     localStorage.setItem(`${userStorageKey}_schedule`, JSON.stringify(schedule));
     localStorage.setItem(`${userStorageKey}_profile`, JSON.stringify(profile));
 
-    if (user?.id) {
-      const userDocRef = doc(db, 'users', user.id);
-      setDoc(
-        userDocRef,
-        {
-          scans,
-          schedule,
-          profile,
-          updatedAt: new Date().toISOString(),
+    const userDocRef = doc(db, 'users', user.id);
+    setDoc(
+      userDocRef,
+      sanitizeDataForFirestore({
+        scans,
+        schedule,
+        profile,
+        settings: {
+          language,
+          voiceRemindersEnabled,
+          selectedVoiceURI,
         },
-        { merge: true }
-      ).catch((err) => console.warn('Firestore update error:', err));
-    }
-  }, [scans, schedule, profile, userStorageKey, user?.id]);
+        updatedAt: new Date().toISOString(),
+      }),
+      { merge: true }
+    ).catch((err) => handleFirestoreError(err, OperationType.WRITE, `users/${user.id}`));
+  }, [
+    scans,
+    schedule,
+    profile,
+    language,
+    voiceRemindersEnabled,
+    selectedVoiceURI,
+    isDataLoaded,
+    loadedUserId,
+    user?.id,
+    userStorageKey,
+  ]);
 
   useEffect(() => {
     if ('Notification' in window) {
